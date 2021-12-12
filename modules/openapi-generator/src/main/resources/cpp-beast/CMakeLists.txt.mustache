@@ -1,0 +1,14 @@
+{{>licenseInfoBash}}
+
+# Find all generated C++ files and add them to the library
+file(GLOB SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+
+find_package(nlohmann_json REQUIRED)
+find_package(Boost REQUIRED system)
+
+add_library({{cppNamespaceForMacros}} STATIC ${SOURCE_FILES})
+set_target_properties({{cppNamespaceForMacros}} PROPERTIES CXX_STANDARD 17 POSITION_INDEPENDENT_CODE ON)
+
+target_link_libraries({{cppNamespaceForMacros}} PUBLIC ${Boost_LIBRARIES} pthread nlohmann_json::nlohmann_json)
+
+target_include_directories({{cppNamespaceForMacros}} SYSTEM PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)

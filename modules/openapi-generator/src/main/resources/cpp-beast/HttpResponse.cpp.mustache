@@ -1,0 +1,15 @@
+#include "HttpResponse.h"
+
+{{#cppNamespaceDeclarations}}
+namespace {{this}} { // NOLINT(readability-identifier-naming)
+{{/cppNamespaceDeclarations}}
+
+static inline void fail(boost::system::error_code ec, char const* what)
+{
+    std::cerr << what << ": " << ec.message() << "\n";
+    // TODO: throw exception?
+}
+
+{{#cppNamespaceDeclarations}}
+}
+{{/cppNamespaceDeclarations}}

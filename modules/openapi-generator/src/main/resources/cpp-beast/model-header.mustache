@@ -1,0 +1,85 @@
+{{>licenseInfo}}
+
+{{#models}}{{#model}}
+#ifndef _{{cppNamespaceForMacros}}_{{classname}}_H_
+#define _{{cppNamespaceForMacros}}_{{classname}}_H_
+{{/model}}{{/models}}
+
+#include "Json.h"
+
+#include <string>
+{{#imports}}
+{{{import}}}
+{{/imports}}
+
+/** 
+ * @defgroup Models Data Structures for API
+ * Classes containing all the Data Structures needed for calling/returned by API endpoints
+ *
+ */
+
+{{#cppNamespaceDeclarations}}
+namespace {{this}} { //NOLINT(modernize-concat-nested-namespaces)
+{{/cppNamespaceDeclarations}}
+
+{{#models}}{{#model}}
+
+/** 
+ * @brief {{{description}}}
+ *
+ * @ingroup Models
+ *
+ */
+{{#isAlias}}
+using {{classname}} = {{dataType}};
+{{/isAlias}}
+{{^isAlias}}
+
+struct {{classname}};
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+void to_json(nlohmann::json& j, const {{classname}}& obj);
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+void from_json(const nlohmann::json& j, {{classname}}& obj);
+
+// NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding, readability-identifier-naming, cppcoreguidelines-pro-type-member-init)
+struct {{classname}} {
+	{{#vars}}
+	std::optional<{{{datatype}}}> {{name}};
+	{{/vars}}
+};
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline void to_json(nlohmann::json& j, const {{classname}}& obj)
+{
+    {{#vars}}
+    if (obj.{{name}}) {
+        j["{{baseName}}"] = obj.{{name}}.value();
+    }
+    {{/vars}}
+}
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline void from_json(const nlohmann::json& j, {{classname}}& obj)
+{
+    {{#vars}}
+    if (j.contains("{{baseName}}") && !j.at("{{baseName}}").is_null()) {
+        {{#isContainer}}
+        {{#isListContainer}}obj.{{name}} = j["{{baseName}}"].get<std::vector<{{#items}}{{{datatype}}}{{/items}}>>();{{/isListContainer}}
+        {{#isMapContainer}}obj.{{name}} = j["{{baseName}}"].get<{{{datatype}}}>();{{/isMapContainer}}
+        {{/isContainer}}
+        {{^isContainer}}obj.{{name}} = j["{{baseName}}"].get<{{baseType}}>();{{/isContainer}}
+    }
+    {{/vars}}
+}
+{{/isAlias}}
+
+{{/model}}
+{{/models}}
+
+{{#cppNamespaceDeclarations}}
+}
+{{/cppNamespaceDeclarations}}
+
+#endif /* _{{cppNamespaceForMacros}}_{{classname}}_H_ */

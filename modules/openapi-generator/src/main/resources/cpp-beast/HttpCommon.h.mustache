@@ -1,0 +1,26 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <map>
+
+{{#cppNamespaceDeclarations}}
+namespace {{this}} { // NOLINT(readability-identifier-naming)
+{{/cppNamespaceDeclarations}}
+
+using HttpHeaders = std::map<std::string, std::string>;
+
+using QueryParams = std::map<std::string, std::string>;
+
+struct HttpResponse
+{
+    unsigned int code;
+    HttpHeaders headers;
+    // Set in case if body is unparsed, e.g. error is returned
+    std::optional<std::string> body;
+    // NOTE: body is missing here, returned instead in the respective method or callback
+};
+
+{{#cppNamespaceDeclarations}}
+}
+{{/cppNamespaceDeclarations}}

@@ -1,0 +1,59 @@
+{{>licenseInfo}}
+
+#include <map>
+#include <cstdlib>
+#include <nlohmann/json.hpp>
+
+{{#models}}{{#model}}
+#include "{{classname}}.h"
+
+{{#cppNamespaceDeclarations}}
+namespace {{this}} { //NOLINT(modernize-concat-nested-namespaces)
+{{/cppNamespaceDeclarations}}
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+using json = nlohmann::json;
+
+void {{classname}}::fromJson(const std::string& jsonStr)
+{
+    auto j = json::parse(jsonStr);
+    from_json(j, *this);
+}
+
+std::string {{classname}}::toJson() const
+{
+    json j(json::value_t::object);
+    to_json(j, *this);
+    return j.dump();
+}
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+void to_json(nlohmann::json& j, const {{classname}}& obj)
+{
+    {{#vars}}
+    if (obj.{{name}}) {
+        j["{{baseName}}"] = obj.{{name}}.value();
+    }
+    {{/vars}}
+}
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+void from_json(const nlohmann::json& j, {{classname}}& obj)
+{
+    {{#vars}}
+    if (j.contains("{{baseName}}")) {
+        {{#isContainer}}
+        {{#isListContainer}}obj.{{name}} = j["{{baseName}}"].get<std::vector<{{#items}}{{{datatype}}}{{/items}}>>();{{/isListContainer}}
+        {{#isMapContainer}}obj.{{name}} = j["{{baseName}}"].get<{{{datatype}}}>();{{/isMapContainer}}
+        {{/isContainer}}
+        {{^isContainer}}obj.{{name}} = j["{{baseName}}"].get<{{baseType}}>();{{/isContainer}}
+    }
+    {{/vars}}
+}
+
+{{/model}}
+{{/models}}
+
+{{#cppNamespaceDeclarations}}
+}
+{{/cppNamespaceDeclarations}}

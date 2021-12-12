@@ -1,0 +1,248 @@
+#pragma once
+
+#include "HttpCommon.h"
+
+#include <map>
+#include <string>
+#include <iostream>
+#include <sstream>
+
+#include <boost/asio.hpp>
+#include <boost/beast.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/asio/ip/tcp.hpp>
+
+{{#cppNamespaceDeclarations}}
+namespace {{this}} { // NOLINT(readability-identifier-naming)
+{{/cppNamespaceDeclarations}}
+
+const int HTTP_VERSION = 11;
+
+namespace asio = boost::asio;
+namespace beast = boost::beast;     // from <boost/beast.hpp>
+namespace http = beast::http;       // from <boost/beast/http.hpp>
+using tcp = asio::ip::tcp;           // from <boost/asio/ip/tcp.hpp>
+
+using HttpCallback = std::function<void(HttpResponse, std::string)>;
+
+static inline void fail(boost::system::error_code ec, char const* what)
+{
+    std::cerr << what << ": " << ec.message() << "\n";
+    // TODO: throw exception?
+}
+
+class HttpTask : public std::enable_shared_from_this<HttpTask>
+{
+    tcp::resolver m_resolver;
+    tcp::socket m_socket;
+
+    struct TcpEndpoint {
+        std::string host;
+        unsigned int port;
+    };
+
+    TcpEndpoint m_endpoint;
+
+    beast::flat_buffer m_buffer;
+    http::request<http::string_body> m_request;
+    http::response<http::string_body> m_response;
+
+public:
+    explicit HttpTask(asio::io_service &ioService, std::string host, unsigned int port)
+        : m_resolver(ioService)
+        , m_socket(ioService)
+        , m_endpoint{host, port}
+    {
+    }
+
+    static std::string parameterToUrlString(std::string value)
+    {
+        return std::move(value);
+    }
+
+    static std::string parameterToUrlString(bool value)
+    {
+        return value ? "true" : "false";
+    }
+
+    static std::string parameterToUrlString(int32_t value)
+    {
+        return std::to_string(value);
+    }
+
+    static std::string parameterToUrlString(int64_t value)
+    {
+        return std::to_string(value);
+    }
+
+    static std::string parameterToUrlString(float value)
+    {
+        return std::to_string(value);
+    }
+
+    static std::string parameterToUrlString(double value)
+    {
+        return std::to_string(value);
+    }
+
+    template<class T>
+    static std::string parameterToUrlString(const std::vector<T>& value)
+    {
+        // FIXME: use boost or std::accumulate?
+
+        std::ostringstream ostr;
+
+        for (size_t i = 0; i < value.size(); i++) {
+            if (i > 0) {
+                ostr << ", ";
+            }
+            ostr << parameterToUrlString(value[i]);
+        }
+
+        return ostr.str();
+    }
+
+    // Start the asynchronous operation
+    void run(std::string path,
+             std::string method,
+             QueryParams queryParams,
+             std::string body,
+             HttpCallback callback)
+    {
+        // Set up an HTTP GET request message
+        m_request.version(HTTP_VERSION);
+        m_request.method_string(method);
+        if (queryParams.empty()) {
+            m_request.target(path);
+        }
+        else {
+            auto composeQueryParam = [](const std::pair<std::string, std::string> &kv) -> std::string {
+                if (kv.second.empty())
+                    return "";
+                return kv.first + "=" + kv.second;
+            };
+
+            m_request.target(path + "?" 
+                + std::accumulate(std::next(queryParams.begin()), queryParams.end(),
+                    composeQueryParam(*queryParams.begin()), [&](std::string s, const auto &kv) {
+                        std::string kvString = composeQueryParam(kv);
+                        if (!kvString.empty())
+                            kvString = "&" + kvString;
+                        return std::move(s) + kvString;
+                    }
+                )
+            );
+        }
+        // Set request body for POST requests
+        if (m_request.method() == http::verb::post || m_request.method() == http::verb::put) {
+            m_request.body() = body;
+            m_request.prepare_payload();
+        }
+        
+        // Look up the domain name
+        std::string host = m_endpoint.host;
+        unsigned int port = m_endpoint.port;
+
+        m_request.set(http::field::host, host);
+        m_request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+
+        m_resolver.async_resolve(
+            host,
+            std::to_string(port),
+            std::bind(
+                &HttpTask::onResolve,
+                shared_from_this(),
+                std::placeholders::_1,
+                std::placeholders::_2,
+                std::move(callback)));
+    }
+
+    void onResolve(boost::system::error_code ec,
+                   tcp::resolver::results_type results,
+                   HttpCallback callback)
+    {
+        if (ec) {
+            return fail(ec, "resolve");
+        }
+
+        // Make the connection on the IP address we get from a lookup
+        boost::asio::async_connect(
+            m_socket,
+            results,
+            std::bind(
+                &HttpTask::onConnect,
+                shared_from_this(),
+                std::placeholders::_1,
+                std::move(callback)));
+    }
+
+    void onConnect(boost::system::error_code ec, HttpCallback callback)
+    {
+        if (ec) {
+            return fail(ec, "connect");
+        }
+
+        // Send the HTTP request to the remote host
+        http::async_write(m_socket, m_request,
+            std::bind(
+                &HttpTask::onWrite,
+                shared_from_this(),
+                std::placeholders::_1,
+                std::placeholders::_2,
+                std::move(callback)));
+    }
+
+    void onWrite(boost::system::error_code ec,
+                  std::size_t bytesTransferred,
+                  HttpCallback callback)
+    {
+        (void)bytesTransferred;
+
+        if (ec) {
+            return fail(ec, "write");
+        }
+        
+        // Receive the HTTP response
+        http::async_read(m_socket, m_buffer, m_response,
+            std::bind(
+                &HttpTask::onRead,
+                shared_from_this(),
+                std::placeholders::_1,
+                std::placeholders::_2,
+                std::move(callback)));
+    }
+
+    void onRead(boost::system::error_code ec,
+                std::size_t bytesTransferred,
+                HttpCallback callback)
+    {
+        boost::ignore_unused(bytesTransferred);
+
+        if (ec) {
+            return fail(ec, "read");
+        }
+        
+        HttpHeaders headers;
+        std::transform(m_response.base().begin(), m_response.base().end(), std::inserter(headers, headers.end()), [](const auto &p) {
+            std::string k(p.name_string());
+            std::string v(p.value());
+            return std::make_pair<std::string, std::string>(std::move(k), std::move(v));
+        });
+        
+        callback(HttpResponse{m_response.result_int(), headers}, m_response.body());
+
+        // Gracefully close the socket
+        m_socket.shutdown(tcp::socket::shutdown_both, ec);
+
+        // not_connected happens sometimes so don't bother reporting it.
+        if (ec && ec != boost::system::errc::not_connected) {
+            return fail(ec, "shutdown");
+        }
+
+        // If we get here then the connection is closed gracefully
+    }
+};
+
+{{#cppNamespaceDeclarations}}
+}
+{{/cppNamespaceDeclarations}}

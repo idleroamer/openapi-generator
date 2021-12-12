@@ -1,0 +1,52 @@
+{{>licenseInfo}}
+
+#ifndef _{{cppNamespaceForMacros}}_{{prefix}}_VARIANT_OBJECT_H_
+#define _{{cppNamespaceForMacros}}_{{prefix}}_VARIANT_OBJECT_H_
+
+#include "Json.h"
+
+{{#cppNamespaceDeclarations}}
+namespace {{this}} { // NOLINT(readability-identifier-naming)
+{{/cppNamespaceDeclarations}}
+
+class VariantObject {
+  public:
+    [[nodiscard]] const nlohmann::json &object() const {
+        return j;
+    }
+
+    [[nodiscard]] nlohmann::json &object() {
+        return j;
+    }
+
+private:
+    nlohmann::json j; // NOLINT(readability-identifier-naming)
+};
+
+inline std::string toString(const VariantObject &obj)
+{
+    return obj.object().dump();
+}
+
+inline void fromString(const std::string &s, VariantObject &obj)
+{
+    obj.object() = nlohmann::json::parse(s);
+}
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline void to_json(nlohmann::json& j, const VariantObject& obj)
+{
+    j = obj.object();
+}
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline void from_json(const nlohmann::json& j, VariantObject& obj)
+{
+    obj.object() = j;
+}
+
+{{#cppNamespaceDeclarations}}
+}
+{{/cppNamespaceDeclarations}}
+
+#endif /* _{{cppNamespaceForMacros}}_{{prefix}}_VARIANT_OBJECT_H_ */

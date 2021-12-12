@@ -1,0 +1,188 @@
+#include "{{classname}}.h"
+
+using namespace std;
+
+#include "HttpTask.h"
+
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/asio.hpp>
+
+#include <boost/algorithm/string/replace.hpp>
+#include <boost/lexical_cast.hpp>
+
+namespace beast = boost::beast;     // from <boost/beast.hpp>
+namespace http = beast::http;       // from <boost/beast/http.hpp>
+namespace asio = boost::asio;       // from <boost/asio.hpp>
+using tcp = asio::ip::tcp;          // from <boost/asio/ip/tcp.hpp>
+
+{{#cppNamespaceDeclarations}}
+namespace {{this}} { //NOLINT(modernize-concat-nested-namespaces)
+{{/cppNamespaceDeclarations}}
+
+{{#operations}}
+
+{{classname}}::{{classname}}(std::string host, unsigned int port, std::string basePath)
+    : m_host(host)
+    , m_port(port)
+    , m_basePath(basePath)
+
+{
+
+}
+
+{{classname}}::~{{classname}}()
+{
+
+}
+
+{{#operation}}
+void {{classname}}::{{nickname}}Async(asio::io_service &ioService, {{#allParams}}{{{dataType}}}{{#isBodyParam}} const &{{/isBodyParam}} {{paramName}}{{#hasMore}}, {{/hasMore}}{{/allParams}}{{#hasParams}}, {{/hasParams}} {{classname}}::{{{nickname}}}CompletionHandler handler)
+{
+    {{#allParams}}
+      {{#required}}
+        {{^isPrimitiveType}}
+        {{^isContainer}}
+    // TODO: verify the required parameter '{{paramName}}' is set
+        {{/isContainer}}
+        {{/isPrimitiveType}}
+      {{/required}}
+    {{/allParams}}
+
+    std::string basePath = m_basePath + "{{{path}}}";
+    
+    {{#pathParams}}
+    std::string {{paramName}}PathParam = std::string("{") + "{{baseName}}" + "}";
+    boost::replace_all(basePath, {{paramName}}PathParam, boost::lexical_cast<std::string>({{paramName}}));
+    {{/pathParams}}
+
+    QueryParams queryParams;
+    HttpHeaders headerParams;
+
+    {{#allParams}}
+      {{^isBodyParam}}
+      {{^isPathParam}}
+        {{#isQueryParam}}
+    queryParams["{{baseName}}"] = HttpTask::parameterToUrlString({{paramName}});
+        {{/isQueryParam}}
+        {{#isHeaderParam}}
+    headerParams["{{baseName}}"] = HttpTask::parameterToUrlString({{paramName}});
+        {{/isHeaderParam}}
+      {{/isPathParam}}
+      {{/isBodyParam}}
+    {{/allParams}}
+
+    {{#authMethods}}
+    // TODO: authentication ({{name}}) required
+    {{/authMethods}}
+
+    auto task = std::make_shared<HttpTask>(ioService, m_host, m_port);
+    std::string _body = "";
+    {{#bodyParam}}
+    _body = toString({{paramName}});
+    {{/bodyParam}}
+
+    task->run(basePath, "{{httpMethod}}", queryParams, _body, [&](HttpResponse response, std::string data) {
+
+        {{#returnType}}
+        auto obj = std::make_optional<{{{returnType}}}>();
+
+        {{#responses}}
+        {{#isDefault}}
+        if (response.code != {{code}}) {
+            response.body = data;
+            handler(response, std::nullopt);
+        }
+
+        fromString(data, *obj);
+
+        {{/isDefault}}
+        {{/responses}}
+
+        handler(response, obj);
+        {{/returnType}}
+
+        {{^returnType}}
+        response.body = data;
+        handler(response);
+        {{/returnType}}
+    });
+}
+
+{{#returnType}}std::optional<{{{returnType}}}>{{/returnType}}{{^returnType}}void{{/returnType}} {{classname}}::{{nickname}}({{#allParams}}{{{dataType}}}{{#isBodyParam}} const &{{/isBodyParam}} {{paramName}}{{#hasMore}}, {{/hasMore}}{{/allParams}}{{#hasParams}}, {{/hasParams}} HttpResponse &httpResponse)
+{
+  asio::io_service ioService;
+  auto task = std::make_shared<HttpTask>(ioService, m_host, m_port);
+
+  std::string basePath = m_basePath + "{{{path}}}";
+
+  {{#pathParams}}
+  std::string {{paramName}}PathParam = std::string("{") + "{{baseName}}" + "}";
+  boost::replace_all(basePath, {{paramName}}PathParam, boost::lexical_cast<std::string>({{paramName}}));
+  {{/pathParams}}
+
+  std::string _body = "";
+  {{#bodyParam}}
+  _body = toString({{paramName}});
+  {{/bodyParam}}
+
+  QueryParams queryParams;
+  HttpHeaders headerParams;
+
+  {{#allParams}}
+    {{^isBodyParam}}
+    {{^isPathParam}}
+      {{#isQueryParam}}
+  queryParams["{{baseName}}"] = HttpTask::parameterToUrlString({{paramName}});
+      {{/isQueryParam}}
+      {{#isHeaderParam}}
+  headerParams["{{baseName}}"] = HttpTask::parameterToUrlString({{paramName}});
+      {{/isHeaderParam}}
+    {{/isPathParam}}
+    {{/isBodyParam}}
+  {{/allParams}}
+
+  {{#authMethods}}
+  // TODO: authentication ({{name}}) required
+  {{/authMethods}}
+
+  {{#returnType}}
+  std::optional<{{{returnType}}}> obj;
+  {{/returnType}}
+
+  task->run(basePath, "{{httpMethod}}", queryParams, _body, [&](HttpResponse response, std::string data) {
+      httpResponse = response;
+      {{#returnType}}
+      obj = std::make_optional<{{{returnType}}}>();
+      {{#responses}}
+      {{#isDefault}}
+      if (httpResponse.code != {{code}}) {
+          httpResponse.body = data;
+          return;
+      }
+
+      fromString(data, *obj);
+
+      {{/isDefault}}
+      {{/responses}}
+      {{/returnType}}
+
+      {{^returnType}}
+      httpResponse.body = data;
+      {{/returnType}}
+  });
+  ioService.run();
+
+  {{#returnType}}
+  return obj;
+  {{/returnType}}
+}
+
+
+{{/operation}}
+{{/operations}}
+
+
+{{#cppNamespaceDeclarations}}
+}
+{{/cppNamespaceDeclarations}}
